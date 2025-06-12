@@ -379,6 +379,15 @@ class AbstractOauthAuthenticator(auth_base.Authenticator, metaclass=abc.ABCMeta)
 
         return token_response
 
+    def logout(self, user, request_handler):
+        """Base logout implementation to be called by child classes"""
+        # Clear token management
+        self._token_manager.logout(user, request_handler)
+        # Clear user state
+        self._remove_user(user)
+        # Persist state if needed
+        self._dump_state()
+
 
 def get_path_for_redirect(request_handler):
     referer = request_handler.request.headers.get('Referer')
@@ -392,13 +401,3 @@ def get_path_for_redirect(request_handler):
     path = parse_result[2]
 
     return urllib_parse.urlunparse((protocol, host, path, '', '', ''))
-
-def logout(self, user, request_handler):
-    # Clear all cookies first
-    request_handler.clear_cookie('token')
-    request_handler.clear_cookie('token_details')
-    
-    # Then clear user state
-    self._token_manager.logout(user, request_handler)
-    self._remove_user(user)
-    self._dump_state()
