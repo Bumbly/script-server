@@ -4,6 +4,8 @@ import hashlib
 import base64
 import secrets
 import urllib.parse
+import tornado.httpclient
+import tornado.escape
 from auth.auth_abstract_oauth import AbstractOauthAuthenticator
 from model import user
 from model.server_conf import InvalidServerConfigException
@@ -120,8 +122,8 @@ class OktaOpenIDAuthenticator(AbstractOauthAuthenticator):
             self.logout_endpoint = oidc_config.get('end_session_endpoint', self.logout_endpoint)
             
             logger.debug("Discovered Okta endpoints:")
-            logger.debug(f"Auth: {self.auth_endpoint}")
-            logger.debug(f"Token: {self.token_endpoint}")
+            logger.debug(f"Auth: {self.oauth_authorized_url}")
+            logger.debug(f"Token: {self.oauth_token_url}")
             logger.debug(f"UserInfo: {self.userinfo_endpoint}")
 
             sync_client.close()
@@ -131,8 +133,8 @@ class OktaOpenIDAuthenticator(AbstractOauthAuthenticator):
             logger.info("Using default Okta endpoints")
                 
         logger.debug('Final endpoints:')
-        logger.debug(f'Auth: {self.auth_endpoint}')
-        logger.debug(f'Token: {self.token_endpoint}')
+        logger.debug(f'Auth: {self.oauth_authorized_url}')
+        logger.debug(f'Token: {self.oauth_token_url}')
         logger.debug(f'UserInfo: {self.userinfo_endpoint}')
 
     def _generate_nonce(self):
