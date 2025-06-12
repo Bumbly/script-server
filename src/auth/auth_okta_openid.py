@@ -87,8 +87,8 @@ class OktaOpenIDAuthenticator(AbstractOauthAuthenticator):
             return user_info['groups']
         if 'claims' in user_info and 'groups' in user_info['claims']:
             return user_info['claims']['groups']
-      logger.debug('no group information found in user_info')  
-      return []
+        logger.debug('no group information found in user_info')  
+        return []
 
     def get_logout_url(self, id_token=None):
         if not self.logout_redirect:
