@@ -9,6 +9,7 @@ from auth.auth_google_oauth import GoogleOauthAuthenticator
 from auth.auth_azure_ad_oauth import AzureAdOAuthAuthenticator
 from auth.auth_htpasswd import HtpasswdAuthenticator
 from auth.auth_ldap import LdapAuthenticator
+from auth.auth_okta_openid import OktaOpenIDAuthenticator
 from auth.authorization import ANY_USER
 from communications.alerts_service import AlertsService
 from features.executions_callback_feature import ExecutionsCallbackFeature
@@ -319,6 +320,40 @@ class TestAuthConfig(unittest.TestCase):
         authenticated = config.authenticator.verifier.verify('user1', 'aaa')
         self.assertTrue(authenticated)
 
+    def test_okta_openid(self):
+        config = _from_json({
+            'auth': {
+                'type': 'okta_openid',
+                'issuer': 'https://dev-123456.okta.com',
+                'client_id': 'test_client',
+                'redirect_uri': 'http://localhost/callback'
+            }
+        })
+        self.assertIsInstance(config.authenticator, OktaOpenIDAuthenticator)
+        self.assertEqual('https://dev-123456.okta.com', config.authenticator.issuer)
+        self.assertEqual('test_client', config.authenticator.client_id)
+
+    def test_okta_openid_missing_issuer(self):
+        with self.assertRaisesRegex(Exception, 'Missing required Okta config fields: issuer'):
+            _from_json({
+                'auth': {
+                    'type': 'okta_openid',
+                    'client_id': 'test_client',
+                    'redirect_uri': 'http://localhost/callback'
+                }
+            })
+
+    def test_okta_openid_invalid_protocol(self):
+        with self.assertRaisesRegex(Exception, 'Issuer URL must include http/https protocol'):
+            _from_json({
+                'auth': {
+                    'type': 'okta_openid',
+                    'issuer': 'dev-123456.okta.com',  # Missing https://
+                    'client_id': 'test_client',
+                    'redirect_uri': 'http://localhost/callback'
+                }
+            })
+    
     def setUp(self) -> None:
         super().setUp()
         test_utils.setup()
@@ -326,7 +361,6 @@ class TestAuthConfig(unittest.TestCase):
     def tearDown(self) -> None:
         super().tearDown()
         test_utils.cleanup()
-
 
 class TestSecurityConfig(unittest.TestCase):
     def test_default_config(self):
