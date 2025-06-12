@@ -392,3 +392,13 @@ def get_path_for_redirect(request_handler):
     path = parse_result[2]
 
     return urllib_parse.urlunparse((protocol, host, path, '', '', ''))
+
+def logout(self, user, request_handler):
+    # Clear all cookies first
+    request_handler.clear_cookie('token')
+    request_handler.clear_cookie('token_details')
+    
+    # Then clear user state
+    self._token_manager.logout(user, request_handler)
+    self._remove_user(user)
+    self._dump_state()
