@@ -353,6 +353,41 @@ class TestAuthConfig(unittest.TestCase):
                     'redirect_uri': 'http://localhost/callback'
                 }
             })
+    def test_okta_openid_pkce_flow(self):
+    config = _from_json({
+        'auth': {
+            'type': 'okta_openid',
+            'issuer': 'https://dev-123456.okta.com',
+            'client_id': 'test_client',
+            'redirect_uri': 'http://localhost/callback'
+            # No client_secret
+        }
+    })
+    self.assertIsNone(config.authenticator.client_secret)
+
+    def test_okta_openid_default_scope(self):
+    config = _from_json({
+        'auth': {
+            'type': 'okta_openid',
+            'issuer': 'https://dev-123456.okta.com',
+            'client_id': 'test_client',
+            'redirect_uri': 'http://localhost/callback'
+            # No scope specified
+        }
+    })
+    self.assertEqual('openid profile email', config.authenticator.scope)
+
+    def test_okta_openid_logout_redirect(self):
+    config = _from_json({
+        'auth': {
+            'type': 'okta_openid',
+            'issuer': 'https://dev-123456.okta.com',
+            'client_id': 'test_client',
+            'redirect_uri': 'http://localhost/callback',
+            'logout_redirect': 'http://localhost/logout'
+        }
+    })
+    self.assertEqual('http://localhost/logout', config.authenticator.logout_redirect)
     
     def setUp(self) -> None:
         super().setUp()
