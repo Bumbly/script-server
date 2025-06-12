@@ -122,7 +122,7 @@ class OktaOpenIDAuthenticator(AbstractOauthAuthenticator):
             self.logout_endpoint = oidc_config.get('end_session_endpoint', self.logout_endpoint)
             
             logger.debug("Discovered Okta endpoints:")
-            logger.debug(f"Auth: {self.oauth_authorized_url}")
+            logger.debug(f"Auth: {self.oauth_authorize_url}")
             logger.debug(f"Token: {self.oauth_token_url}")
             logger.debug(f"UserInfo: {self.userinfo_endpoint}")
 
@@ -293,11 +293,22 @@ class OktaOpenIDAuthenticator(AbstractOauthAuthenticator):
             return None
 
     def logout(self, user, request_handler):
-        """Extended logout to clear tokens"""
-        self._token_manager.logout(user, request_handler)
-        self._pkce_verifiers.clear()
-        self._nonces.clear()
-        super().logout(user, request_handler)
+    # Get id_token before clearing tokens if available
+    token_response = self._token_manager._restore_token_response_from_cookies(request_handler)
+    id_token = token_response.oauth_response.get('id_token') if token_response else None
+    
+    # Clear all authentication artifacts in proper order
+    self._token_manager.logout(user, request_handler)
+    self._pkce_verifiers.clear()
+    self._nonces.clear()
+    
+    # Call parent logout (which clears user state)
+    super().logout(user, request_handler)
+    
+    # Redirect to Okta logout if configured
+    logout_url = self.get_logout_url(id_token)
+    if logout_url:
+        request_handler.redirect(logout_url)
 
     def get_logout_url(self, id_token=None):
         """Generate Okta logout URL"""
