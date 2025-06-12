@@ -1,4 +1,5 @@
 import logging
+import requests
 from auth.auth_abstract_oauth import AbstractOauthAuthenticator
 from model import user
 
@@ -7,22 +8,23 @@ logger = logging.getLogger('auth_okta_openid')
 
 class OktaOpenIDAuthenticator(AbstractOauthAuthenticator):
     def __init__(self, params_dict):
+        issuer = params_dict['issuer'].rstrip('/')
+        if not issuer.startswith(('http://', 'https://')):
+            raise ValueError("Issuer URL must include http/https protocol")
+        
         super().__init__(
-            'Okta OpenID Connect',
-            params_dict['client_id'],
-            params_dict.get('client_secret'),
-            params_dict['issuer'].rstrip('/'),
-            params_dict.get('scope', 'openid profile email'),
-            params_dict['redirect_uri'],
-            params_dict.get('logout_redirect')
+            oauth_authorize_url=f"{issuer}/v1/authorize",  
+            oauth_token_url=f"{issuer}/v1/token",          
+            oauth_scope=params_dict.get('scope', 'openid profile email'),  
+            params_dict=params_dict                        
         )
 
-        # Okta-specific endpoints
-        self.auth_endpoint = f"{self.provider_url}/v1/authorize"
-        self.token_endpoint = f"{self.provider_url}/v1/token"
-        self.userinfo_endpoint = f"{self.provider_url}/v1/userinfo"
-        self.jwks_uri = f"{self.provider_url}/v1/keys"
-        self.logout_endpoint = f"{self.provider_url}/v1/logout"
+        # Store Okta-specific endpoints (parent class may not expose these)
+        self.issuer = issuer 
+        self.userinfo_endpoint = f"{issuer}/v1/userinfo"
+        self.jwks_uri = f"{issuer}/v1/keys"
+        self.logout_endpoint = f"{issuer}/v1/logout"
+        self.logout_redirect = params_dict.get('logout_redirect')
 
         # Discover endpoints dynamically
         self._discover_endpoints()
@@ -30,8 +32,8 @@ class OktaOpenIDAuthenticator(AbstractOauthAuthenticator):
     def _discover_endpoints(self):
         """Discover Okta's OIDC configuration"""
         try:
-            discovery_url = f"{self.provider_url}/.well-known/openid-configuration"
-            response = self.session.get(discovery_url)
+            discovery_url = f"{self.issuer}/.well-known/openid-configuration"
+            response = self.session.get(discovery_url, timeout=10)
             response.raise_for_status()
             oidc_config = response.json()
             
@@ -45,12 +47,22 @@ class OktaOpenIDAuthenticator(AbstractOauthAuthenticator):
             logger.debug(f"Auth: {self.auth_endpoint}")
             logger.debug(f"Token: {self.token_endpoint}")
             logger.debug(f"UserInfo: {self.userinfo_endpoint}")
-        except Exception as e:
+        except requests.exceptions.RequestException as e:
             logger.warning(f"Couldn't discover Okta OIDC config: {str(e)}")
             logger.info("Using default Okta endpoints")
+            if not hasattr(self, 'auth_endpoint'):
+                self.auth_endpoint = f'{self.issuer}/v1/authorize'
+                self.token_endpoint = f'{self.issuer}/v1/token'
+                self.userinfo_endpoint = f'{self.issuer}/v1/userinfo'
+                self.jwks_uri = f'{self.issuer}/v1/keys'
+                
+        logger.debug('Final endpoints:')
+        logger.debug(f'Auth: {self.auth_endpoint}')
+        logger.debug(f'Token: {self.token_endpoint}')
+        logger.debug(f'UserInfo: {self.userinfo_endpoint}')
 
     def _get_authorization_params(self, state):
-        return {
+        params = {
             'response_type': 'code',
             'client_id': self.client_id,
             'redirect_uri': self.redirect_uri,
@@ -58,6 +70,10 @@ class OktaOpenIDAuthenticator(AbstractOauthAuthenticator):
             'state': state,
             'nonce': self._generate_nonce()
         }
+        if not self.client_secret:
+            params['code_challenge'] = self._generate_code_challenge()
+            params['code_challenge_method'] = 'S256'
+        return params
 
     def _exchange_code(self, code):
         return {
@@ -65,7 +81,8 @@ class OktaOpenIDAuthenticator(AbstractOauthAuthenticator):
             'code': code,
             'redirect_uri': self.redirect_uri,
             'client_id': self.client_id,
-            'client_secret': self.client_secret
+            'client_secret': self.client_secret,
+            'scope' : self.scope
         }
 
     def _map_user_info(self, user_info):
@@ -91,7 +108,7 @@ class OktaOpenIDAuthenticator(AbstractOauthAuthenticator):
         return []
 
     def get_logout_url(self, id_token=None):
-        if not self.logout_redirect:
+        if not hasattr(self, 'logout_redirect') or not self.logout_redirect:
             return None
             
         params = {
