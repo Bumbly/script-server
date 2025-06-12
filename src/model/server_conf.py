@@ -249,6 +249,9 @@ def create_authenticator(auth_object, temp_folder, process_invoker: ProcessInvok
     elif auth_type == 'htpasswd':
         from auth.auth_htpasswd import HtpasswdAuthenticator
         authenticator = HtpasswdAuthenticator(auth_object, process_invoker)
+    elif auth_type == 'okta_openid':
+        from auth.auth_okta_openid import OktaOpenIDAuthenticator
+        authenticator = OktaOpenIDAuthenticator(auth_object)
     else:
         raise Exception(auth_type + ' auth is not supported')
 
