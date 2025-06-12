@@ -7,6 +7,7 @@ import urllib.parse
 import tornado.httpclient
 import tornado.escape
 from auth.auth_abstract_oauth import AbstractOauthAuthenticator
+from auth.base import AuthRejectedError, AuthFailureError
 from model import user
 from model.server_conf import InvalidServerConfigException
 
