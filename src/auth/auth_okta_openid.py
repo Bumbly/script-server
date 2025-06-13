@@ -8,7 +8,7 @@ import tornado.httpclient
 import tornado.escape
 from auth.auth_abstract_oauth import AbstractOauthAuthenticator
 from auth.auth_base import AuthRejectedError, AuthFailureError
-from model import user
+from auth import user
 from model.server_conf import InvalidServerConfigException
 
 logger = logging.getLogger('auth_okta_openid')
@@ -81,6 +81,7 @@ class OktaOpenIDAuthenticator(AbstractOauthAuthenticator):
         oauth_authorize_url = f'{issuer}/v1/authorize'
         oauth_token_url = f'{issuer}/v1/token'
         oauth_scope = params_dict.get('scope', 'openid profile email')
+        self.timeout = params_dict.get('timeout', 10)
         
         super().__init__(
             oauth_authorize_url=oauth_authorize_url, 
@@ -112,28 +113,46 @@ class OktaOpenIDAuthenticator(AbstractOauthAuthenticator):
         """Discover Okta's OIDC configuration"""
         try:
             discovery_url = f"{self.issuer}/.well-known/openid-configuration"
-            import tornado.httpclient
+            logger.debug(f"Attempting to discover endpoints with timeout {self.timeout}s")
+            
+            # Initialize with default endpoints
+            self.oauth_authorize_url = f"{self.issuer}/v1/authorize"
+            self.oauth_token_url = f"{self.issuer}/v1/token"
+            self.userinfo_endpoint = f"{self.issuer}/v1/userinfo"
+            self.jwks_uri = f"{self.issuer}/v1/keys"
+            
             sync_client = tornado.httpclient.HTTPClient()
-            response = sync_client.fetch(discovery_url, request_timeout=10)
-            oidc_config = tornado.escape.json_decode(response.body)
-            
-            self.oauth_authorize_url = oidc_config['authorization_endpoint']
-            self.oauth_token_url = oidc_config['token_endpoint']
-            self.userinfo_endpoint = oidc_config['userinfo_endpoint']
-            self.jwks_uri = oidc_config['jwks_uri']
-            self.logout_endpoint = oidc_config.get('end_session_endpoint', self.logout_endpoint)
-            
-            logger.debug("Discovered Okta endpoints:")
-            logger.debug(f"Auth: {self.oauth_authorize_url}")
-            logger.debug(f"Token: {self.oauth_token_url}")
-            logger.debug(f"UserInfo: {self.userinfo_endpoint}")
-
-            sync_client.close()
-        
-        except Exception as e:
-            logger.warning(f"Couldn't discover Okta OIDC config: {str(e)}")
-            logger.info("Using default Okta endpoints")
+            try:
+                response = sync_client.fetch(
+                    discovery_url,
+                    request_timeout=self.timeout,  # Use configured timeout
+                    validate_cert=False  # Remove in production
+                )
+                oidc_config = tornado.escape.json_decode(response.body)
                 
+                # Update with discovered endpoints
+                self.oauth_authorize_url = oidc_config['authorization_endpoint']
+                self.oauth_token_url = oidc_config['token_endpoint']
+                self.userinfo_endpoint = oidc_config['userinfo_endpoint']
+                self.jwks_uri = oidc_config['jwks_uri']
+                self.logout_endpoint = oidc_config.get('end_session_endpoint', self.logout_endpoint)
+                
+                logger.info(f"Discovered endpoints in {response.request_time}s")
+                
+            except tornado.httpclient.HTTPError as e:
+                if e.response:
+                    logger.warning(f"Discovery failed with status {e.response.code}")
+                else:
+                    logger.warning(f"Discovery failed: {str(e)}")
+                logger.info("Using default endpoints")
+                
+            finally:
+                sync_client.close()
+                
+        except Exception as e:
+            logger.error(f"Endpoint discovery error: {str(e)}")
+            raise
+        
         logger.debug('Final endpoints:')
         logger.debug(f'Auth: {self.oauth_authorize_url}')
         logger.debug(f'Token: {self.oauth_token_url}')
@@ -316,7 +335,8 @@ class OktaOpenIDAuthenticator(AbstractOauthAuthenticator):
 
     def get_logout_url(self, id_token=None):
         """Generate Okta logout URL"""
-        if not hasattr(self, 'logout_redirect') or not self.logout_redirect:
+        if not getattr(self, 'logout_redirect', None):
+            logger.debug("No logout_redirect configured -- ending logout chain")
             return None
             
         params = {
@@ -326,5 +346,7 @@ class OktaOpenIDAuthenticator(AbstractOauthAuthenticator):
         
         if id_token:
             params['id_token_hint'] = id_token
-            
-        return self._build_url(self.logout_endpoint, params)
+        
+        logout_url = self._build_url(self.logout_endpoint, params)
+        logger.debug(f'Generated Logout URL: {logout_url}')
+        return logout_url
