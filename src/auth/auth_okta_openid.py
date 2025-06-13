@@ -64,6 +64,7 @@ class OktaOpenIDAuthenticator(AbstractOauthAuthenticator):
         }
     
     def __init__(self, params_dict):
+        params_dict = params_dict.get('okta', params_dict)
 
         missing_fields = [field for field in self.get_required_config_fields() 
                         if field not in params_dict]
@@ -134,7 +135,7 @@ class OktaOpenIDAuthenticator(AbstractOauthAuthenticator):
             logger.info("Using default Okta endpoints")
                 
         logger.debug('Final endpoints:')
-        logger.debug(f'Auth: {self.oauth_authorized_url}')
+        logger.debug(f'Auth: {self.oauth_authorize_url}')
         logger.debug(f'Token: {self.oauth_token_url}')
         logger.debug(f'UserInfo: {self.userinfo_endpoint}')
 
