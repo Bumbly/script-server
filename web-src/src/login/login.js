@@ -55,6 +55,8 @@ function onLoad() {
             setupAuthentikAuth(loginContainer, config);
         } else if (config['type'] === 'gitlab') {
             setupGitlabOAuth(loginContainer, config);
+        } else if (config['type'] === 'okta_openid') {
+            setupOktaOAuth(loginContainer, config);
         } else {
             setupCredentials(loginContainer);
         }
@@ -122,6 +124,14 @@ function setupGitlabOAuth(loginContainer, authConfig) {
         authConfig,
         'login-gitlab-template',
         'login-gitlab-button')
+}
+
+function setupOktaOAuth(loginContainer, authConfig) {
+    setupOAuth(
+        loginContainer,
+        authConfig,
+        'login-okta-template',
+        'login-okta-button')
 }
 
 function setupOAuth(loginContainer, authConfig, templateName, buttonId) {
