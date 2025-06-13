@@ -104,7 +104,8 @@ h6.header {
 #login-panel .login-azure_ad_oauth .login-info-label,
 #login-panel .login-gitlab .login-info-label,
 #login-panel .login-keycloak .login-info-label,
-#login-panel .login-authentik .login-info-label {
+#login-panel .login-authentik .login-info-label, 
+#login-panel .login-okta .login-info-label {
     margin-top: 16px;
 }
 
@@ -171,4 +172,8 @@ h6.header {
 #login-authentik-button {
     padding-left: 50px;
     background-image: url('../authentik_icon.png');
+}
+
+#login-okta-button {
+    background-image: url('../okta-logo.png');
 }
