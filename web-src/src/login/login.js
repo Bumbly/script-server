@@ -135,6 +135,17 @@ function setupOktaOAuth(loginContainer, authConfig) {
 }
 
 function setupOAuth(loginContainer, authConfig, templateName, buttonId) {
+	if (!authConfig || typeof authConfig !== 'object') {
+	console.error("Invalid auth config");
+	return;
+	}
+	
+	const requiredKeys = ['oauth_url', 'client_id', 'oauth_scope'];
+	if (!requiredKeys.every(k=>k in authConfig)) {
+		console.error("Missing required OAuth config keys");
+		return;
+	}
+	
     var credentialsTemplate = createTemplateElement(templateName);
     loginContainer.appendChild(credentialsTemplate);
 
@@ -157,6 +168,7 @@ function setupOAuth(loginContainer, authConfig, templateName, buttonId) {
             'scope': authConfig['oauth_scope'],
             'response_type': OAUTH_RESPONSE_KEY
         };
+		
         const query = toQueryArgs(queryArgs);
         window.location = authConfig['oauth_url'] + '?' + query;
     };

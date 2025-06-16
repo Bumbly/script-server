@@ -14,6 +14,7 @@ import tornado
 import tornado.ioloop
 from tornado import httpclient, escape
 from tornado.httpclient import HTTPClientError
+from tornado.web import RequestHandler
 
 from auth import auth_base
 from auth.auth_base import AuthFailureError, AuthBadRequestException, AuthRejectedError
@@ -34,6 +35,28 @@ class _UserState:
         self.last_auth_update = None
         self.last_visit = None
 
+class OAuthCallbackHandler(RequestHandler):
+    """
+    Base handler for OAuth callbacks
+    """
+    async def get(self):
+        try:
+            state = self.get_argument('state', '')
+            if not self.auth.validate_state(state):
+                raise ValueError('Invalid State Parameter')
+                
+            user_data = await self.auth.handle_oauth_callback(
+                self.get_argument('code'),
+                self.request.full_url()
+            )
+            
+            await self.auth.create_session(self, user_data)
+            self.redirect(self.get_secure_cookie('post_auth_redirect') or '/')
+            
+        except Exception as e:
+            logging.exception("OAuth callback failed")
+            self.set_status(400)
+            self.finish(f'Authentication failed: {str(e)}')
 
 class _OauthUserInfo:
     def __init__(self, username, enabled, oauth_response, eager_groups=None):
@@ -60,6 +83,34 @@ def _start_timer(callback):
 
 
 class AbstractOauthAuthenticator(auth_base.Authenticator, metaclass=abc.ABCMeta):
+    """
+    Extend the abstract class with callback functionality
+    """
+    def get_oauth_handlers(self):
+        """
+        Returns list of (route, handler) tuples for OAuth routes
+        Should be implemented by concrete classes
+        """
+        raise NotImplementedError()
+    
+    async def handle_oauth_callback(self, code, callback_url):
+        """
+        Process OAuth callback: exchange code for tokens and get user info
+        """
+        raise NotImplementedError()
+    
+    def validate_state(self, state):
+        """
+        Validate state parameter against stored state
+        """
+        # Implement state validation logic
+        return True  # In production, compare with stored state
+    
+    async def create_session(self, handler, user_data):
+        """
+        Create user session after successful authentication
+        """
+        raise NotImplementedError()
     def __init__(self, oauth_authorize_url, oauth_token_url, oauth_scope, params_dict):
         super().__init__()
 

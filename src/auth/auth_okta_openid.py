@@ -6,14 +6,65 @@ import secrets
 import urllib.parse
 import tornado.httpclient
 import tornado.escape
-from auth.auth_abstract_oauth import AbstractOauthAuthenticator
+import aiohttp
+from tornado.httputil import url_concat
+from auth.auth_abstract_oauth import AbstractOauthAuthenticator, OAuthCallbackHandler
 from auth.auth_base import AuthRejectedError, AuthFailureError
 from auth import user
 from model.server_conf import InvalidServerConfigException
 
 logger = logging.getLogger('auth_okta_openid')
 
+class OktaAuthCallbackHandler(OAuthCallbackHandler):
+    def initialize(self, auth):
+        self.auth = auth
+        self.token_manager = auth._token_manager  # Access your existing token manager
+
+    async def get(self):
+        try:
+            # Validate state first
+            state = self.get_argument('state', '')
+            if not self.auth.validate_state(state):
+                raise AuthRejectedError("Invalid state parameter")
+
+            # Use your existing token exchange logic
+            code = self.get_argument('code')
+            token_response = await self.auth.fetch_access_token_by_code(code, self)
+            
+            # Use your existing user info fetching
+            user_info = await self.auth.fetch_user_info(token_response.access_token)
+            
+            # Create session using your existing mechanisms
+            await self._create_session(user_info, token_response)
+            
+            # Redirect to original URL or default
+            self.redirect(self.get_secure_cookie('post_auth_redirect', '/'))
+            
+        except AuthRejectedError as e:
+            logger.warning(f"Auth rejected: {str(e)}")
+            self.set_status(403)
+            self.finish("Authentication rejected")
+        except Exception as e:
+            logger.exception("OAuth callback failed")
+            self.set_status(500)
+            self.finish("Authentication failed")
+
+    async def _create_session(self, user_info, token_response):
+        """Leverage your existing session creation logic"""
+        # This should integrate with your existing user management
+        user = self.auth._create_or_update_user(user_info)
+        self.token_manager.save_token_response(user, token_response, self)
+        
+        # Set session cookie or whatever your auth system uses
+        self.set_secure_cookie("user_id", user.username)
+
 class OktaOpenIDAuthenticator(AbstractOauthAuthenticator):
+    
+    def get_auth_handlers(self):
+        """Returns list of (route, handler) tuples for all auth routes"""
+        return [
+            (r'/auth/callback', OktaAuthCallbackHandler, {'auth': self}),
+        ]
     
     @staticmethod
     def get_required_config_fields():
@@ -30,6 +81,11 @@ class OktaOpenIDAuthenticator(AbstractOauthAuthenticator):
     
     def get_client_visible_config(self):
         return {
+            'oauth_url': self.oauth_authorize_url,
+            'client_id' : self.client_id,
+            'redirect_uri': self.redirect_uri,
+            'oauth_scope': self.oauth_scope,
+            'type': 'okta_openid',
             'name': 'Okta OpenID',
             'fields': [
                 {
@@ -65,6 +121,8 @@ class OktaOpenIDAuthenticator(AbstractOauthAuthenticator):
     
     def __init__(self, params_dict):
         params_dict = params_dict.get('okta', params_dict)
+        
+        logger.debug('Loaded Okta Config: %s', params_dict)
 
         missing_fields = [field for field in self.get_required_config_fields() 
                         if field not in params_dict]
@@ -75,6 +133,10 @@ class OktaOpenIDAuthenticator(AbstractOauthAuthenticator):
         issuer = params_dict['issuer'].rstrip('/')
         if not issuer.startswith(('http://', 'https://')):
             raise ValueError("Issuer URL must include http/https protocol")
+            
+        self.client_id = params_dict.get('client_id')
+        if not self.client_id:
+            raise ValueError('client_id is required')
 
         normalized_params = params_dict.copy()
         normalized_params['secret'] = params_dict.get('client_secret', '')
@@ -92,7 +154,7 @@ class OktaOpenIDAuthenticator(AbstractOauthAuthenticator):
 
         # Store Okta-specific endpoints (parent class may not expose these)
         self.issuer = issuer 
-        self.redirect_url = params_dict['redirect_uri']
+        self.redirect_uri = params_dict['redirect_uri']
         self.client_secret = params_dict.get('client_secret')
         self.userinfo_endpoint = f'{issuer}/v1/userinfo'
         self.jwks_uri = f'{issuer}/v1/keys'
@@ -104,6 +166,8 @@ class OktaOpenIDAuthenticator(AbstractOauthAuthenticator):
 
         # Discover endpoints dynamically
         self._discover_endpoints()
+        
+        
 
     def is_configured(self):
         """Required for admin UI health checks"""
@@ -204,7 +268,7 @@ class OktaOpenIDAuthenticator(AbstractOauthAuthenticator):
             return base_url
         query_string = urllib.parse.urlencode(params)
         return f"{base_url}?{query_string}"
-
+        
     async def fetch_access_token_by_code(self, code, request_handler):
         """Exchange authorization code for tokens with PKCE support"""
         state = request_handler.get_argument('state', None)

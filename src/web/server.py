@@ -854,6 +854,9 @@ def init(server_config: ServerConfig,
         handlers.append((r'/auth/config', AuthConfigHandler))
         handlers.append((r'/logout', LogoutHandler))
 
+        if hasattr(authenticator, 'get_auth_handlers'):
+            handlers.extend(authenticator.get_auth_handlers())
+
     handlers.append((r'/theme/(.*)', ThemeStaticFileHandler, {'path': os.path.join(conf_folder, 'theme')}))
     handlers.append((r"/(.*)", AuthorizedStaticFileHandler, {"path": "web"}))
 
