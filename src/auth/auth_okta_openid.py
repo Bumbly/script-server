@@ -8,7 +8,7 @@ import tornado.httpclient
 import tornado.escape
 import aiohttp
 from tornado.httputil import url_concat
-from auth.auth_abstract_oauth import AbstractOauthAuthenticator, OAuthCallbackHandler
+from auth.auth_abstract_oauth import _OauthUserInfo, AbstractOauthAuthenticator, OAuthCallbackHandler
 from auth.auth_base import AuthRejectedError, AuthFailureError
 from auth import user
 from model.server_conf import InvalidServerConfigException
@@ -18,7 +18,7 @@ logger = logging.getLogger('auth_okta_openid')
 class OktaAuthCallbackHandler(OAuthCallbackHandler):
     def initialize(self, auth):
         self.auth = auth
-        self.token_manager = auth._token_manager  # Access your existing token manager
+        self.token_manager = auth._token_manager 
 
     async def get(self):
         try:
@@ -38,7 +38,7 @@ class OktaAuthCallbackHandler(OAuthCallbackHandler):
             await self._create_session(user_info, token_response)
             
             # Redirect to original URL or default
-            self.redirect(self.get_secure_cookie('post_auth_redirect', '/'))
+            self.redirect(self.get_secure_cookie('post_auth_redirect', '/')) # type: ignore
             
         except AuthRejectedError as e:
             logger.warning(f"Auth rejected: {str(e)}")
@@ -382,7 +382,7 @@ class OktaOpenIDAuthenticator(AbstractOauthAuthenticator):
         token_response = self._token_manager._restore_token_response_from_cookies(request_handler)
         id_token = None
         if token_response and hasattr(token_response, 'oauth_response'):
-            id_token = token_response.oauth_response.get('id_token')
+            id_token = token_response.oauth_response.get('id_token') # type: ignore
         
         # Clear all authentication artifacts in proper order
         self._token_manager.logout(user, request_handler)

@@ -387,7 +387,7 @@ class AbstractOauthAuthenticator(auth_base.Authenticator, metaclass=abc.ABCMeta)
         pass
 
     @abc.abstractmethod
-    async def fetch_user_groups(self, access_token):
+    async def fetch_user_groups(self, access_token: str) -> list[str]:
         pass
 
     # Tests only
