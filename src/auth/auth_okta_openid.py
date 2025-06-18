@@ -51,11 +51,11 @@ class OktaAuthCallbackHandler(OAuthCallbackHandler):
 
     async def _create_session(self, user_info, token_response):
         """Leverage your existing session creation logic"""
-        # This should integrate with your existing user management
+
         user = self.auth._create_or_update_user(user_info)
         self.token_manager.save_token_response(user, token_response, self)
         
-        # Set session cookie or whatever your auth system uses
+
         self.set_secure_cookie("user_id", user.username)
 
 class OktaOpenIDAuthenticator(AbstractOauthAuthenticator):
@@ -152,7 +152,7 @@ class OktaOpenIDAuthenticator(AbstractOauthAuthenticator):
             params_dict=normalized_params                       
         )
 
-        # Store Okta-specific endpoints (parent class may not expose these)
+        # Store Okta-specific endpoints
         self.issuer = issuer 
         self.redirect_uri = params_dict['redirect_uri']
         self.client_secret = params_dict.get('client_secret')
@@ -190,7 +190,7 @@ class OktaOpenIDAuthenticator(AbstractOauthAuthenticator):
                 response = sync_client.fetch(
                     discovery_url,
                     request_timeout=self.timeout,  # Use configured timeout
-                    validate_cert=False  # Remove in production
+                    validate_cert=False 
                 )
                 oidc_config = tornado.escape.json_decode(response.body)
                 
