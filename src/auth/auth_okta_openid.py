@@ -130,7 +130,7 @@ class OktaOpenIDAuthenticator(AbstractOauthAuthenticator):
             raise InvalidServerConfigException(
                 f"Missing required Okta config fields: {', '.join(missing_fields)}")
         
-        self.redirect_uri = "http://scriptserver-oktatest.eastus.cloudapp.azure.com:5555/oauth/callback"
+        self.redirect_uri = "PlaceHolder"
         
         issuer = params_dict['issuer'].rstrip('/')
         if not issuer.startswith(('http://', 'https://')):
