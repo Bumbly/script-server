@@ -44,15 +44,19 @@ class OAuthCallbackHandler(RequestHandler):
             state = self.get_argument('state', '')
             if not self.auth.validate_state(state):
                 raise ValueError('Invalid State Parameter')
+            
+            callback_url = self.auth.redirect_uri
                 
             user_data = await self.auth.handle_oauth_callback(
                 self.get_argument('code'),
-                self.request.full_url()
+                callback_url
             )
             
             await self.auth.create_session(self, user_data)
             self.redirect(self.get_secure_cookie('post_auth_redirect') or '/')
-            
+
+            LOGGER.debug(f"Callback received at: {self.request.full_url()}")
+            LOGGER.debug(f"Using configured redirect_uri: {self.auth.redirect_uri}")
         except Exception as e:
             logging.exception("OAuth callback failed")
             self.set_status(400)
@@ -129,6 +133,7 @@ class AbstractOauthAuthenticator(auth_base.Authenticator, metaclass=abc.ABCMeta)
         self.auth_info_ttl = params_dict.get('auth_info_ttl')
         self.session_expire = read_int_from_config('session_expire_minutes', params_dict, default=0) * 60
         self.dump_file = params_dict.get('state_dump_file')
+        self.redirect_uri = model_helper.read_obligatory(params_dict, 'redirect_uri', ' for OAuth')
 
         if self.dump_file:
             self._validate_dump_file(self.dump_file)
@@ -265,7 +270,7 @@ class AbstractOauthAuthenticator(auth_base.Authenticator, metaclass=abc.ABCMeta)
 
     async def fetch_access_token_by_code(self, code, request_handler):
         return await self._fetch_token({
-            'redirect_uri': get_path_for_redirect(request_handler),
+            'redirect_uri': self.redirect_uri,
             'code': code,
             'client_id': self.client_id,
             'client_secret': self.secret,

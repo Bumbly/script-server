@@ -63,7 +63,7 @@ class OktaOpenIDAuthenticator(AbstractOauthAuthenticator):
     def get_auth_handlers(self):
         """Returns list of (route, handler) tuples for all auth routes"""
         return [
-            (r'/auth/callback', OktaAuthCallbackHandler, {'auth': self}),
+            (r'/oauth/callback', OktaAuthCallbackHandler, {'auth': self}),
         ]
     
     @staticmethod
@@ -108,7 +108,7 @@ class OktaOpenIDAuthenticator(AbstractOauthAuthenticator):
                     'name': 'redirect_uri',
                     'type': 'text',
                     'title': 'Redirect URI',
-                    'placeholder': 'https://your-script-server/auth/callback'
+                    'placeholder': 'https://your-script-server/oauth/callback'
                 },
                 {
                     'name': 'scope',
@@ -129,6 +129,8 @@ class OktaOpenIDAuthenticator(AbstractOauthAuthenticator):
         if missing_fields:
             raise InvalidServerConfigException(
                 f"Missing required Okta config fields: {', '.join(missing_fields)}")
+        
+        self.redirect_uri = "http://scriptserver-oktatest.eastus.cloudapp.azure.com:5555/oauth/callback"
         
         issuer = params_dict['issuer'].rstrip('/')
         if not issuer.startswith(('http://', 'https://')):
@@ -273,6 +275,7 @@ class OktaOpenIDAuthenticator(AbstractOauthAuthenticator):
         """Exchange authorization code for tokens with PKCE support"""
         state = request_handler.get_argument('state', None)
         
+        logger.debug(f"Using redirect_uri: {self.redirect_uri}")
         body = {
             'grant_type': 'authorization_code',
             'code': code,
